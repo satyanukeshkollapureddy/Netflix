@@ -1,4 +1,4 @@
-cat > jenkins_docker_java.sh << 'EOF'
+cat > script2.sh << 'EOF'
 #!/bin/bash
 set -e
 
