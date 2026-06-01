@@ -1,0 +1,56 @@
+#!/bin/bash
+set -e
+
+echo "===== SYSTEM UPDATE ====="
+dnf update -y
+
+echo "===== INSTALL DOCKER ====="
+dnf install -y docker
+
+systemctl enable docker
+systemctl start docker
+
+# Add ec2-user to docker group (IMPORTANT)
+usermod -aG docker ec2-user
+
+# Fix docker socket permission (temporary fallback)
+chmod 666 /var/run/docker.sock || true
+
+echo "===== INSTALL JAVA (CORRETTO 17) ====="
+dnf install -y java-17-amazon-corretto
+
+java -version
+
+echo "===== INSTALL JENKINS ====="
+
+# Add Jenkins repo
+wget -O /etc/yum.repos.d/jenkins.repo \
+    https://pkg.jenkins.io/redhat-stable/jenkins.repo
+
+rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+
+dnf install -y jenkins
+
+systemctl enable jenkins
+systemctl start jenkins
+
+echo "===== INSTALL NODEJS (JAVASCRIPT) ====="
+
+dnf install -y nodejs npm
+
+node -v
+npm -v
+
+echo "===== FIREWALL PORTS (if enabled) ====="
+# Jenkins default port
+firewall-cmd --permanent --add-port=8080/tcp || true
+firewall-cmd --reload || true
+
+echo "===== FINAL STATUS ====="
+systemctl status docker --no-pager || true
+systemctl status jenkins --no-pager || true
+
+echo "===== GET JENKINS PASSWORD ====="
+cat /var/lib/jenkins/secrets/initialAdminPassword || true
+
+echo "===== SETUP COMPLETE ====="
