@@ -1,29 +1,46 @@
 #!/bin/bash
 set -e
 
-echo "===== SYSTEM UPDATE ====="
+echo "============================"
+echo "UPDATING SYSTEM"
+echo "============================"
 dnf update -y
 
-echo "===== INSTALL DOCKER ====="
-dnf install -y docker
-
-systemctl enable docker
-systemctl start docker
-
-# Add ec2-user to docker group (IMPORTANT)
-usermod -aG docker ec2-user
-
-# Fix docker socket permission (temporary fallback)
-chmod 666 /var/run/docker.sock || true
-
-echo "===== INSTALL JAVA (CORRETTO 17) ====="
+echo "============================"
+echo "INSTALL JAVA 21 (MANDATORY FOR NEW JENKINS)"
+echo "============================"
 dnf install -y java-21-amazon-corretto
 
 java -version
 
-echo "===== INSTALL JENKINS ====="
+echo "============================"
+echo "SET JAVA 21 AS DEFAULT"
+echo "============================"
+alternatives --set java /usr/lib/jvm/java-21-amazon-corretto.x86_64/bin/java || true
 
-# Add Jenkins repo
+echo "============================"
+echo "INSTALL DOCKER"
+echo "============================"
+dnf install -y docker
+systemctl enable docker
+systemctl start docker
+
+# Add default users to docker group
+usermod -aG docker ec2-user || true
+usermod -aG docker jenkins || true
+
+echo "============================"
+echo "INSTALL NODEJS (FOR JS APPS)"
+echo "============================"
+dnf install -y nodejs npm
+
+node -v
+npm -v
+
+echo "============================"
+echo "INSTALL JENKINS"
+echo "============================"
+
 wget -O /etc/yum.repos.d/jenkins.repo \
     https://pkg.jenkins.io/redhat-stable/jenkins.repo
 
@@ -31,26 +48,45 @@ rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 
 dnf install -y jenkins
 
+echo "============================"
+echo "CONFIGURE JAVA FOR JENKINS"
+echo "============================"
+sed -i 's|^JAVA=.*|JAVA=/usr/lib/jvm/java-21-amazon-corretto/bin/java|g' /etc/sysconfig/jenkins || true
+
+echo "JAVA_HOME=/usr/lib/jvm/java-21-amazon-corretto" >> /etc/sysconfig/jenkins || true
+
+echo "============================"
+echo "ENABLE SERVICES"
+echo "============================"
+systemctl enable docker
+systemctl start docker
+
 systemctl enable jenkins
 systemctl start jenkins
 
-echo "===== INSTALL NODEJS (JAVASCRIPT) ====="
+echo "============================"
+echo "FIX PERMISSIONS"
+echo "============================"
+chown -R jenkins:jenkins /var/lib/jenkins || true
 
-dnf install -y nodejs npm
-
-node -v
-npm -v
-
-echo "===== FIREWALL PORTS (if enabled) ====="
-# Jenkins default port
+echo "============================"
+echo "OPEN FIREWALL PORT (OPTIONAL)"
+echo "============================"
 firewall-cmd --permanent --add-port=8080/tcp || true
 firewall-cmd --reload || true
 
-echo "===== FINAL STATUS ====="
+echo "============================"
+echo "FINAL STATUS"
+echo "============================"
 systemctl status docker --no-pager || true
 systemctl status jenkins --no-pager || true
 
-echo "===== GET JENKINS PASSWORD ====="
+echo "============================"
+echo "GET JENKINS PASSWORD"
+echo "============================"
 cat /var/lib/jenkins/secrets/initialAdminPassword || true
 
-echo "===== SETUP COMPLETE ====="
+echo "============================"
+echo "SETUP COMPLETE"
+echo "============================"
+echo "Open: http://<EC2-PUBLIC-IP>:8080"
