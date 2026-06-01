@@ -17,7 +17,7 @@ usermod -aG docker ec2-user
 chmod 666 /var/run/docker.sock || true
 
 echo "===== INSTALL JAVA (CORRETTO 17) ====="
-dnf install -y java-17-amazon-corretto
+dnf install -y java-21-amazon-corretto
 
 java -version
 
