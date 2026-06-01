@@ -1,0 +1,46 @@
+pipeline {
+agent any
+
+
+stages {
+
+    stage("checkout-code") {
+        steps {
+            git branch: 'main',
+                url: 'https://github.com/satyanukeshkollapureddy/devsecops-netflix.git'
+        }
+    }
+
+    stage("version") {
+        steps {
+            sh 'terraform --version'
+        }
+    }
+
+    stage("init") {
+        steps {
+            dir('EKS_TERRAFORM') {
+                sh 'terraform init'
+            }
+        }
+    }
+
+    stage("plan") {
+        steps {
+            dir('EKS_TERRAFORM') {
+                sh 'terraform plan'
+            }
+        }
+    }
+
+    stage("apply") {
+        steps {
+            dir('EKS_TERRAFORM') {
+                sh 'terraform ${action} --auto-approve'
+            }
+        }
+    }
+}
+
+
+}
