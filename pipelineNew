@@ -1,0 +1,149 @@
+pipeline {
+    agent any
+
+    tools {
+        jdk 'jdk23'
+        nodejs 'node23'
+    }
+
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+        IMAGE_NAME = "sandy315/tetrisv1:latest"
+    }
+
+    stages {
+
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Checkout Application Code') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/satyanukeshkollapureddy/devsecops-Tetris-V1.git'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh '''
+                    $SCANNER_HOME/bin/sonar-scanner \
+                    -Dsonar.projectName=tetris \
+                    -Dsonar.projectKey=tetris
+                    '''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: false
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install'
+            }
+        }
+
+        stage('Trivy File System Scan') {
+            steps {
+                sh '''
+                trivy fs . > trivyfs.txt || true
+                '''
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                docker build -t tetris .
+                '''
+            }
+        }
+
+        stage('Docker Tag') {
+            steps {
+                sh '''
+                docker tag tetris ${IMAGE_NAME}
+                '''
+            }
+        }
+
+        stage('Docker Push') {
+            steps {
+                withDockerRegistry([credentialsId: 'docker']) {
+                    sh '''
+                    docker push ${IMAGE_NAME}
+                    '''
+                }
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh '''
+                trivy image ${IMAGE_NAME} > trivyimage.txt || true
+                '''
+            }
+        }
+
+        stage('Checkout Manifest Repository') {
+            steps {
+                dir('manifest-repo') {
+                    git branch: 'main',
+                        credentialsId: 'github',
+                        url: 'https://github.com/satyanukeshkollapureddy/devsecops-tetris-manifest.git'
+                }
+            }
+        }
+
+        stage('Update Kubernetes Manifest') {
+            steps {
+                dir('manifest-repo') {
+                    withCredentials([
+                        string(
+                            credentialsId: 'github',
+                            variable: 'GITHUB_TOKEN'
+                        )
+                    ]) {
+
+                        sh '''
+                        sed -i "s|image: .*|image: ${IMAGE_NAME}|" deployment.yml
+
+                        git config user.name "Jenkins"
+                        git config user.email "jenkins@example.com"
+
+                        git add deployment.yml
+
+                        git commit -m "Updated image to ${IMAGE_NAME}" || true
+
+                        git push https://${GITHUB_TOKEN}@github.com/satyanukeshkollapureddy/devsecops-tetris-manifest.git HEAD:main
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+
+        always {
+            archiveArtifacts artifacts: '*.txt', allowEmptyArchive: true
+        }
+
+        success {
+            echo 'Pipeline executed successfully!'
+        }
+
+        failure {
+            echo 'Pipeline execution failed!'
+        }
+    }
+}
